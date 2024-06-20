@@ -188,6 +188,19 @@ const (
 	Update = Access(C.GA_Update)
 )
 
+// Flag indicating seek tyoe one of SEEK_SET, SEEK_CUR, SEEK_END.
+// type Whence int
+
+// const (
+// 	// Read only (no update) access
+// 	SEEK_SET = Whence(C.)
+// 	, SEEK_CUR or SEEK_END.
+
+// 	ReadOnly = Access(C.GA_ReadOnly)
+// 	// Read/write access.
+// 	Update = Access(C.GA_Update)
+// )
+
 // Read/Write flag for RasterIO() method
 type RWFlag int
 
@@ -198,6 +211,24 @@ const (
 	Write = RWFlag(C.GF_Write)
 )
 
+type GMFlag uint
+
+const (
+	MFAllValid   = GMFlag(C.GMF_ALL_VALID)
+	MFPerDataset = GMFlag(C.GMF_PER_DATASET)
+	MFAlpha      = GMFlag(C.GMF_ALPHA)
+	MFNoData     = GMFlag(C.GMF_NODATA)
+)
+
+// GMF_ALL_VALID(0x01): There are no invalid pixels, all mask values will be
+
+// When used this will normally be the only flag set.
+
+// GMF_PER_DATASET(0x02): The mask band is shared between all bands on the dataset.
+
+// GMF_ALPHA(0x04): The mask band is actually an alpha band and may have values other than 0 and 255.
+
+// GMF_NODATA(0x08):
 type OpenFlag uint
 
 const (
@@ -1895,6 +1926,56 @@ func VSIFReadL(nSize, nCount int, file VSILFILE) []byte {
 	C.VSIFReadL(p, C.size_t(nSize), C.size_t(nCount), file.cval)
 
 	return data
+}
+
+/**
+ * \fn int VSIVirtualHandle::Seek( vsi_l_offset nOffset, int nWhence )
+ * \brief Seek to requested offset.
+ *
+ * Seek to the desired offset (nOffset) in the indicated file.
+ *
+ * This method goes through the VSIFileHandler virtualization and may
+ * work on unusual filesystems such as in memory.
+ *
+ * Analog of the POSIX fseek() call.
+ *
+ * Caution: vsi_l_offset is a unsigned type, so SEEK_CUR can only be used
+ * for positive seek. If negative seek is needed, use
+ * handle->Seek( handle->Tell() + negative_offset, SEEK_SET ).
+ *
+ * @param nOffset offset in bytes.
+ * @param nWhence one of SEEK_SET, SEEK_CUR or SEEK_END.
+ *
+ * @return 0 on success or -1 one failure.
+ */
+
+/**
+ * \brief Seek to requested offset.
+ *
+ * Seek to the desired offset (nOffset) in the indicated file.
+ *
+ * This method goes through the VSIFileHandler virtualization and may
+ * work on unusual filesystems such as in memory.
+ *
+ * Analog of the POSIX fseek() call.
+ *
+ * Caution: vsi_l_offset is a unsigned type, so SEEK_CUR can only be used
+ * for positive seek. If negative seek is needed, use
+ * VSIFSeekL( fp, VSIFTellL(fp) + negative_offset, SEEK_SET ).
+ *
+ * @param fp file handle opened with VSIFOpenL().
+ * @param nOffset offset in bytes.
+ * @param nWhence one of SEEK_SET, SEEK_CUR or SEEK_END.
+ *
+ * @return 0 on success or -1 one failure.
+ */
+
+func VSIFSeekL(file VSILFILE, offset int, seekType int) error {
+	success := C.VSIFSeekL(file.cval, C.ulonglong(offset), C.int(seekType))
+	if success != 0 {
+		return fmt.Errorf("Error: VSILFILE   seek error")
+	}
+	return nil
 }
 
 // Delete a file. This method goes through the VSIFileHandler virtualization and may work on

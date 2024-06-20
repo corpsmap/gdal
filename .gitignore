@@ -5,3 +5,4 @@ examples/grid/grid
 .idea
 .devcontainer
 .github
+.vscode
