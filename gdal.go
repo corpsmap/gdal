@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"unsafe"
 )
 
@@ -32,45 +33,89 @@ const (
 	RELEASE_NAME  = string(C.GDAL_RELEASE_NAME)
 )
 
-var (
-	ErrDebug   = errors.New("Debug Error")
-	ErrWarning = errors.New("Warning Error")
-	ErrFailure = errors.New("Failure Error")
-	ErrFatal   = errors.New("Fatal Error")
-	ErrIllegal = errors.New("Illegal Error")
+const (
+	CE_None    = CPLErr(C.CE_None)
+	CE_Debug   = CPLErr(C.CE_Debug)
+	CE_Warning = CPLErr(C.CE_Warning)
+	CE_Failure = CPLErr(C.CE_Failure)
+	CE_Fatal   = CPLErr(C.CE_Fatal)
 )
 
-// Error handling.  The following is bare-bones, and needs to be replaced with something more useful.
-func (err C.CPLErr) Err() error {
+type CPLErr int
+
+var (
+	ErrDebug                   = errors.New("Debug Error")
+	ErrWarning                 = errors.New("Warning Error")
+	ErrFailure                 = errors.New("Failure Error")
+	ErrFatal                   = errors.New("Fatal Error")
+	ErrIllegal                 = errors.New("Illegal Error")
+	ErrNotEnoughData           = errors.New("Not Enough Data Error")
+	ErrNotEnoughMemory         = errors.New("Not Enough Memory Error")
+	ErrUnsupportedGeometryType = errors.New("Unsupported Geometry Type Error")
+	ErrUnsupportedOperation    = errors.New("Unsupported Operation Error")
+	ErrCorruptData             = errors.New("Corrupt Data Error")
+	ErrUnsupportedSRS          = errors.New("Unsupported SRS Error")
+	ErrInvalidHandle           = errors.New("Invalid Handle Error")
+	ErrNonExistingFeature      = errors.New("Non Existing Feature Error")
+	ErrUndefined               = errors.New("Undefined Error")
+)
+
+// Error handling.
+func (err CPLErr) Err() error {
 	switch err {
-	case 0:
+	case CE_None:
 		return nil
-	case 1:
+	case CE_Debug:
 		return ErrDebug
-	case 2:
+	case CE_Warning:
 		return ErrWarning
-	case 3:
+	case CE_Failure:
 		return ErrFailure
-	case 4:
+	case CE_Fatal:
 		return ErrFailure
 	}
 	return ErrIllegal
 }
 
-func (err C.OGRErr) Err() error {
+type OGRErr int
+
+const (
+	OGRERR_NONE                      = OGRErr(C.OGRERR_NONE)
+	OGRERR_NOT_ENOUGH_DATA           = OGRErr(C.OGRERR_NOT_ENOUGH_DATA)
+	OGRERR_NOT_ENOUGH_MEMORY         = OGRErr(C.OGRERR_NOT_ENOUGH_MEMORY)
+	OGRERR_UNSUPPORTED_GEOMETRY_TYPE = OGRErr(C.OGRERR_UNSUPPORTED_GEOMETRY_TYPE)
+	OGRERR_UNSUPPORTED_OPERATION     = OGRErr(C.OGRERR_UNSUPPORTED_OPERATION)
+	OGRERR_CORRUPT_DATA              = OGRErr(C.OGRERR_CORRUPT_DATA)
+	OGRERR_FAILURE                   = OGRErr(C.OGRERR_FAILURE)
+	OGRERR_UNSUPPORTED_SRS           = OGRErr(C.OGRERR_UNSUPPORTED_SRS)
+	OGRERR_INVALID_HANDLE            = OGRErr(C.OGRERR_INVALID_HANDLE)
+	OGRERR_NON_EXISTING_FEATURE      = OGRErr(C.OGRERR_NON_EXISTING_FEATURE)
+)
+
+func (err OGRErr) Err() error {
 	switch err {
 	case 0:
 		return nil
 	case 1:
-		return ErrDebug
+		return ErrNotEnoughData
 	case 2:
-		return ErrWarning
+		return ErrNotEnoughMemory
 	case 3:
-		return ErrFailure
+		return ErrUnsupportedGeometryType
 	case 4:
+		return ErrUnsupportedOperation
+	case 5:
+		return ErrCorruptData
+	case 6:
 		return ErrFailure
+	case 7:
+		return ErrUnsupportedSRS
+	case 8:
+		return ErrInvalidHandle
+	case 9:
+		return ErrNonExistingFeature
 	}
-	return ErrIllegal
+	return ErrUndefined
 }
 
 // Pixel data types
@@ -110,7 +155,7 @@ func (dataType DataType) Union(dataTypeB DataType) DataType {
 	)
 }
 
-//Safe array conversion
+// Safe array conversion
 func IntSliceToCInt(data []int) []C.int {
 	sliceSz := len(data)
 	result := make([]C.int, sliceSz)
@@ -120,7 +165,7 @@ func IntSliceToCInt(data []int) []C.int {
 	return result
 }
 
-//Safe array conversion
+// Safe array conversion
 func CIntSliceToInt(data []C.int) []int {
 	sliceSz := len(data)
 	result := make([]int, sliceSz)
@@ -600,7 +645,7 @@ func (driver Driver) DeleteDataset(name string) error {
 	cDriver := driver.cval
 	cName := C.CString(name)
 	defer C.free(unsafe.Pointer(cName))
-	return C.GDALDeleteDataset(cDriver, cName).Err()
+	return CPLErr(C.GDALDeleteDataset(cDriver, cName)).Err()
 }
 
 // Rename named dataset
@@ -610,7 +655,7 @@ func (driver Driver) RenameDataset(newName, oldName string) error {
 	defer C.free(unsafe.Pointer(cNewName))
 	cOldName := C.CString(oldName)
 	defer C.free(unsafe.Pointer(cOldName))
-	return C.GDALRenameDataset(cDriver, cNewName, cOldName).Err()
+	return CPLErr(C.GDALRenameDataset(cDriver, cNewName, cOldName)).Err()
 }
 
 // Copy all files associated with the named dataset
@@ -620,7 +665,7 @@ func (driver Driver) CopyDatasetFiles(newName, oldName string) error {
 	defer C.free(unsafe.Pointer(cNewName))
 	cOldName := C.CString(oldName)
 	defer C.free(unsafe.Pointer(cOldName))
-	return C.GDALCopyDatasetFiles(cDriver, cNewName, cOldName).Err()
+	return CPLErr(C.GDALCopyDatasetFiles(cDriver, cNewName, cOldName)).Err()
 }
 
 // Get the short name associated with this driver
@@ -721,10 +766,10 @@ func (rasterBand *RasterBand) SetMetadataItem(name, value, domain string) error 
 	c_domain := C.CString(domain)
 	defer C.free(unsafe.Pointer(c_domain))
 
-	return C.GDALSetMetadataItem(
+	return CPLErr(C.GDALSetMetadataItem(
 		C.GDALMajorObjectH(unsafe.Pointer(rasterBand.cval)),
 		c_name, c_value, c_domain,
-	).Err()
+	)).Err()
 }
 
 // TODO: Make korrekt class hirerarchy via interfaces
@@ -739,10 +784,10 @@ func (object *Dataset) SetMetadataItem(name, value, domain string) error {
 	c_domain := C.CString(domain)
 	defer C.free(unsafe.Pointer(c_domain))
 
-	return C.GDALSetMetadataItem(
+	return CPLErr(C.GDALSetMetadataItem(
 		C.GDALMajorObjectH(unsafe.Pointer(object.cval)),
 		c_name, c_value, c_domain,
-	).Err()
+	)).Err()
 }
 
 // Fetch single metadata item.
@@ -857,11 +902,11 @@ func (dataset Dataset) AddBand(dataType DataType, options []string) error {
 	}
 	cOptions[length] = (*C.char)(unsafe.Pointer(nil))
 
-	return C.GDALAddBand(
+	return CPLErr(C.GDALAddBand(
 		dataset.cval,
 		C.GDALDataType(dataType),
 		(**C.char)(unsafe.Pointer(&cOptions[0])),
-	).Err()
+	)).Err()
 }
 
 type ResampleAlg int
@@ -941,7 +986,7 @@ func (dataset Dataset) IO(
 		return err
 	}
 
-	return C.GDALDatasetRasterIO(
+	return CPLErr(C.GDALDatasetRasterIO(
 		dataset.cval,
 		C.GDALRWFlag(rwFlag),
 		C.int(xOff), C.int(yOff), C.int(xSize), C.int(ySize),
@@ -951,7 +996,7 @@ func (dataset Dataset) IO(
 		C.int(bandCount),
 		(*C.int)(unsafe.Pointer(&IntSliceToCInt(bandMap)[0])),
 		C.int(pixelSpace), C.int(lineSpace), C.int(bandSpace),
-	).Err()
+	)).Err()
 }
 
 // Advise driver of upcoming read requests
@@ -971,7 +1016,7 @@ func (dataset Dataset) AdviseRead(
 	}
 	cOptions[length] = (*C.char)(unsafe.Pointer(nil))
 
-	return C.GDALDatasetAdviseRead(
+	return CPLErr(C.GDALDatasetAdviseRead(
 		dataset.cval,
 		C.int(xOff), C.int(yOff), C.int(xSize), C.int(ySize),
 		C.int(bufXSize), C.int(bufYSize),
@@ -979,7 +1024,7 @@ func (dataset Dataset) AdviseRead(
 		C.int(bandCount),
 		(*C.int)(unsafe.Pointer(&IntSliceToCInt(bandMap)[0])),
 		(**C.char)(unsafe.Pointer(&cOptions[0])),
-	).Err()
+	)).Err()
 }
 
 // Fetch the projection definition string for this dataset
@@ -993,7 +1038,7 @@ func (dataset Dataset) SetProjection(proj string) error {
 	cProj := C.CString(proj)
 	defer C.free(unsafe.Pointer(cProj))
 
-	return C.GDALSetProjection(dataset.cval, cProj).Err()
+	return CPLErr(C.GDALSetProjection(dataset.cval, cProj)).Err()
 }
 
 // Get the affine transformation coefficients
@@ -1005,10 +1050,10 @@ func (dataset Dataset) GeoTransform() [6]float64 {
 
 // Set the affine transformation coefficients
 func (dataset Dataset) SetGeoTransform(transform [6]float64) error {
-	return C.GDALSetGeoTransform(
+	return CPLErr(C.GDALSetGeoTransform(
 		dataset.cval,
 		(*C.double)(unsafe.Pointer(&transform[0])),
-	).Err()
+	)).Err()
 }
 
 // Return the inverted transform
@@ -1062,14 +1107,17 @@ func (dataset Dataset) BuildOverviews(
 	nBands int,
 	bandList []int,
 	progress ProgressFunc,
-	data interface{},
+	data []string,
 ) error {
 	cResampling := C.CString(resampling)
 	defer C.free(unsafe.Pointer(cResampling))
 
-	arg := &goGDALProgressFuncProxyArgs{progress, data}
+	optsStr := strings.Join(data, ";")
+	cData := C.CString(optsStr)
+	defer C.free(unsafe.Pointer(cData))
+	arg := &goGDALProgressFuncProxyArgs{progress, cData}
 
-	return C.GDALBuildOverviews(
+	return CPLErr(C.GDALBuildOverviews(
 		dataset.cval,
 		cResampling,
 		C.int(nOverviews),
@@ -1078,7 +1126,7 @@ func (dataset Dataset) BuildOverviews(
 		(*C.int)(unsafe.Pointer(&IntSliceToCInt(bandList)[0])),
 		C.goGDALProgressFuncProxyB(),
 		unsafe.Pointer(arg),
-	).Err()
+	)).Err()
 }
 
 // Unimplemented: GDALGetOpenDatasets
@@ -1097,7 +1145,7 @@ func (dataset Dataset) FlushCache() {
 
 // Adds a mask band to the dataset
 func (dataset Dataset) CreateMaskBand(flags int) error {
-	return C.GDALCreateDatasetMaskBand(dataset.cval, C.int(flags)).Err()
+	return CPLErr(C.GDALCreateDatasetMaskBand(dataset.cval, C.int(flags))).Err()
 }
 
 // Copy all dataset raster data
@@ -1117,13 +1165,13 @@ func (sourceDataset Dataset) CopyWholeRaster(
 	}
 	cOptions[length] = (*C.char)(unsafe.Pointer(nil))
 
-	return C.GDALDatasetCopyWholeRaster(
+	return CPLErr(C.GDALDatasetCopyWholeRaster(
 		sourceDataset.cval,
 		destDataset.cval,
 		(**C.char)(unsafe.Pointer(&cOptions[0])),
 		C.goGDALProgressFuncProxyB(),
 		unsafe.Pointer(arg),
-	).Err()
+	)).Err()
 }
 
 /* ==================================================================== */
@@ -1157,12 +1205,24 @@ func (rasterBand RasterBand) AdviseRead(
 	}
 	cOptions[length] = (*C.char)(unsafe.Pointer(nil))
 
-	return C.GDALRasterAdviseRead(
+	return CPLErr(C.GDALRasterAdviseRead(
 		rasterBand.cval,
 		C.int(xOff), C.int(yOff), C.int(xSize), C.int(ySize), C.int(bufXSize), C.int(bufYSize),
 		C.GDALDataType(dataType),
 		(**C.char)(unsafe.Pointer(&cOptions[0])),
-	).Err()
+	)).Err()
+}
+
+type GdalNumber interface {
+	int64 | int32 | float64 | float32
+}
+
+func ReadRasterBandData[T GdalNumber](rb *RasterBand) ([]T, error) {
+	px := rb.XSize()
+	py := rb.YSize()
+	data := make([]T, px*py)
+	err := rb.IO(Read, 0, 0, px, py, data, px, py, 0, 0)
+	return data, err
 }
 
 // Read / Write a region of image data for this band
@@ -1178,7 +1238,7 @@ func (rasterBand RasterBand) IO(
 		return err
 	}
 
-	return C.GDALRasterIO(
+	return CPLErr(C.GDALRasterIO(
 		rasterBand.cval,
 		C.GDALRWFlag(rwFlag),
 		C.int(xOff), C.int(yOff), C.int(xSize), C.int(ySize),
@@ -1186,17 +1246,33 @@ func (rasterBand RasterBand) IO(
 		C.int(bufXSize), C.int(bufYSize),
 		C.GDALDataType(dataType),
 		C.int(pixelSpace), C.int(lineSpace),
-	).Err()
+	)).Err()
+}
+
+func (rasterBand RasterBand) ReadBlock(xOff, yOff int, buffer any) error {
+	_, dataPtr, err := determineBufferType(buffer)
+	if err != nil {
+		return err
+	}
+	return CPLErr(C.GDALReadBlock(rasterBand.cval, C.int(xOff), C.int(yOff), dataPtr)).Err()
 }
 
 // Read a block of image data efficiently
-func (rasterBand RasterBand) ReadBlock(xOff, yOff int, dataPtr unsafe.Pointer) error {
-	return C.GDALReadBlock(rasterBand.cval, C.int(xOff), C.int(yOff), dataPtr).Err()
+func (rasterBand RasterBand) ReadBlock2(xOff, yOff int, dataPtr unsafe.Pointer) error {
+	return CPLErr(C.GDALReadBlock(rasterBand.cval, C.int(xOff), C.int(yOff), dataPtr)).Err()
+}
+
+func (rasterBand RasterBand) WriteBlock(xOff, yOff int, buffer any) error {
+	_, dataPtr, err := determineBufferType(buffer)
+	if err != nil {
+		return err
+	}
+	return CPLErr(C.GDALWriteBlock(rasterBand.cval, C.int(xOff), C.int(yOff), dataPtr)).Err()
 }
 
 // Write a block of image data efficiently
-func (rasterBand RasterBand) WriteBlock(xOff, yOff int, dataPtr unsafe.Pointer) error {
-	return C.GDALWriteBlock(rasterBand.cval, C.int(xOff), C.int(yOff), dataPtr).Err()
+func (rasterBand RasterBand) WriteBlock2(xOff, yOff int, dataPtr unsafe.Pointer) error {
+	return CPLErr(C.GDALWriteBlock(rasterBand.cval, C.int(xOff), C.int(yOff), dataPtr)).Err()
 }
 
 // Fetch X size of raster
@@ -1237,7 +1313,7 @@ func (rasterBand RasterBand) ColorInterp() ColorInterp {
 
 // Set color interpretation of the raster band
 func (rasterBand RasterBand) SetColorInterp(colorInterp ColorInterp) error {
-	return C.GDALSetRasterColorInterpretation(rasterBand.cval, C.GDALColorInterp(colorInterp)).Err()
+	return CPLErr(C.GDALSetRasterColorInterpretation(rasterBand.cval, C.GDALColorInterp(colorInterp))).Err()
 }
 
 // Fetch the color table associated with this raster band
@@ -1248,7 +1324,7 @@ func (rasterBand RasterBand) ColorTable() ColorTable {
 
 // Set the raster color table for this raster band
 func (rasterBand RasterBand) SetColorTable(colorTable ColorTable) error {
-	return C.GDALSetRasterColorTable(rasterBand.cval, colorTable.cval).Err()
+	return CPLErr(C.GDALSetRasterColorTable(rasterBand.cval, colorTable.cval)).Err()
 }
 
 // Check for arbitrary overviews
@@ -1278,7 +1354,7 @@ func (rasterBand RasterBand) NoDataValue() (val float64, valid bool) {
 
 // Set the no data value for this band
 func (rasterBand RasterBand) SetNoDataValue(val float64) error {
-	return C.GDALSetRasterNoDataValue(rasterBand.cval, C.double(val)).Err()
+	return CPLErr(C.GDALSetRasterNoDataValue(rasterBand.cval, C.double(val))).Err()
 }
 
 // Fetch the list of category names for this raster
@@ -1308,7 +1384,7 @@ func (rasterBand RasterBand) SetRasterCategoryNames(names []string) error {
 	}
 	cStrings[length] = (*C.char)(unsafe.Pointer(nil))
 
-	return C.GDALSetRasterCategoryNames(rasterBand.cval, (**C.char)(unsafe.Pointer(&cStrings[0]))).Err()
+	return CPLErr(C.GDALSetRasterCategoryNames(rasterBand.cval, (**C.char)(unsafe.Pointer(&cStrings[0])))).Err()
 }
 
 // Fetch the minimum value for this band
@@ -1362,13 +1438,13 @@ func (rasterBand RasterBand) ComputeStatistics(
 
 // Set statistics on raster band
 func (rasterBand RasterBand) SetStatistics(min, max, mean, stdDev float64) error {
-	return C.GDALSetRasterStatistics(
+	return CPLErr(C.GDALSetRasterStatistics(
 		rasterBand.cval,
 		C.double(min),
 		C.double(max),
 		C.double(mean),
 		C.double(stdDev),
-	).Err()
+	)).Err()
 }
 
 // Return raster unit type
@@ -1382,7 +1458,7 @@ func (rasterBand RasterBand) SetUnitType(unit string) error {
 	cString := C.CString(unit)
 	defer C.free(unsafe.Pointer(cString))
 
-	return C.GDALSetRasterUnitType(rasterBand.cval, cString).Err()
+	return CPLErr(C.GDALSetRasterUnitType(rasterBand.cval, cString)).Err()
 }
 
 // Fetch the raster value offset
@@ -1394,7 +1470,7 @@ func (rasterBand RasterBand) GetOffset() (float64, bool) {
 
 // Set scaling offset
 func (rasterBand RasterBand) SetOffset(offset float64) error {
-	return C.GDALSetRasterOffset(rasterBand.cval, C.double(offset)).Err()
+	return CPLErr(C.GDALSetRasterOffset(rasterBand.cval, C.double(offset))).Err()
 }
 
 // Fetch the raster value scale
@@ -1406,7 +1482,7 @@ func (rasterBand RasterBand) GetScale() (float64, bool) {
 
 // Set scaling ratio
 func (rasterBand RasterBand) SetScale(scale float64) error {
-	return C.GDALSetRasterScale(rasterBand.cval, C.double(scale)).Err()
+	return CPLErr(C.GDALSetRasterScale(rasterBand.cval, C.double(scale))).Err()
 }
 
 // Compute the min / max values for a band
@@ -1438,7 +1514,7 @@ func (rasterBand RasterBand) Histogram(
 
 	histogram := make([]C.GUIntBig, buckets)
 
-	if err := C.GDALGetRasterHistogramEx(
+	if err := CPLErr(C.GDALGetRasterHistogramEx(
 		rasterBand.cval,
 		C.double(min),
 		C.double(max),
@@ -1448,7 +1524,7 @@ func (rasterBand RasterBand) Histogram(
 		C.int(approxOK),
 		C.goGDALProgressFuncProxyB(),
 		unsafe.Pointer(arg),
-	).Err(); err != nil {
+	)).Err(); err != nil {
 		return nil, err
 	} else {
 		return CUIntBigSliceToInt(histogram), nil
@@ -1467,7 +1543,7 @@ func (rasterBand RasterBand) DefaultHistogram(
 
 	var cHistogram *C.GUIntBig
 
-	err = C.GDALGetDefaultHistogramEx(
+	err = CPLErr(C.GDALGetDefaultHistogramEx(
 		rasterBand.cval,
 		(*C.double)(&min),
 		(*C.double)(&max),
@@ -1476,7 +1552,7 @@ func (rasterBand RasterBand) DefaultHistogram(
 		C.int(force),
 		C.goGDALProgressFuncProxyB(),
 		unsafe.Pointer(arg),
-	).Err()
+	)).Err()
 
 	sliceHeader := (*reflect.SliceHeader)(unsafe.Pointer(&histogram))
 	sliceHeader.Cap = buckets
@@ -1496,7 +1572,7 @@ func (rasterBand RasterBand) DefaultHistogram(
 
 // Fill this band with a constant value
 func (rasterBand RasterBand) Fill(real, imaginary float64) error {
-	return C.GDALFillRaster(rasterBand.cval, C.double(real), C.double(imaginary)).Err()
+	return CPLErr(C.GDALFillRaster(rasterBand.cval, C.double(real), C.double(imaginary))).Err()
 }
 
 // Unimplemented: ComputeBandStats
@@ -1511,7 +1587,7 @@ func (rasterBand RasterBand) GetDefaultRAT() RasterAttributeTable {
 
 // Set default Raster Attribute Table
 func (rasterBand RasterBand) SetDefaultRAT(rat RasterAttributeTable) error {
-	return C.GDALSetDefaultRAT(rasterBand.cval, rat.cval).Err()
+	return CPLErr(C.GDALSetDefaultRAT(rasterBand.cval, rat.cval)).Err()
 }
 
 // Unimplemented: AddDerivedBandPixelFunc
@@ -1530,7 +1606,7 @@ func (rasterBand RasterBand) GetMaskFlags() int {
 
 // Adds a mask band to the current band
 func (rasterBand RasterBand) CreateMaskBand(flags int) error {
-	return C.GDALCreateMaskBand(rasterBand.cval, C.int(flags)).Err()
+	return CPLErr(C.GDALCreateMaskBand(rasterBand.cval, C.int(flags))).Err()
 }
 
 // Copy all raster band raster data
@@ -1550,13 +1626,13 @@ func (sourceRaster RasterBand) RasterBandCopyWholeRaster(
 	}
 	cOptions[length] = (*C.char)(unsafe.Pointer(nil))
 
-	return C.GDALRasterBandCopyWholeRaster(
+	return CPLErr(C.GDALRasterBandCopyWholeRaster(
 		sourceRaster.cval,
 		destRaster.cval,
 		(**C.char)(unsafe.Pointer(&cOptions[0])),
 		C.goGDALProgressFuncProxyB(),
 		unsafe.Pointer(arg),
-	).Err()
+	)).Err()
 }
 
 // Generate downsampled overviews
@@ -1748,12 +1824,12 @@ func (rat RasterAttributeTable) SetRowCount(count int) {
 func (rat RasterAttributeTable) CreateColumn(name string, rft RATFieldType, rfu RATFieldUsage) error {
 	cName := C.CString(name)
 	defer C.free(unsafe.Pointer(cName))
-	return C.GDALRATCreateColumn(rat.cval, cName, C.GDALRATFieldType(rft), C.GDALRATFieldUsage(rfu)).Err()
+	return CPLErr(C.GDALRATCreateColumn(rat.cval, cName, C.GDALRATFieldType(rft), C.GDALRATFieldUsage(rfu))).Err()
 }
 
 // Set linear binning information
 func (rat RasterAttributeTable) SetLinearBinning(row0min, binsize float64) error {
-	return C.GDALRATSetLinearBinning(rat.cval, C.double(row0min), C.double(binsize)).Err()
+	return CPLErr(C.GDALRATSetLinearBinning(rat.cval, C.double(row0min), C.double(binsize))).Err()
 }
 
 // Fetch linear binning information
@@ -1764,7 +1840,7 @@ func (rat RasterAttributeTable) LinearBinning() (row0min, binsize float64, exist
 
 // Initialize RAT from color table
 func (rat RasterAttributeTable) FromColorTable(ct ColorTable) error {
-	return C.GDALRATInitializeFromColorTable(rat.cval, ct.cval).Err()
+	return CPLErr(C.GDALRATInitializeFromColorTable(rat.cval, ct.cval)).Err()
 }
 
 // Translate RAT to a color table
@@ -1860,4 +1936,67 @@ func VSIFReadL(nSize, nCount int, file VSILFILE) []byte {
 	C.VSIFReadL(p, C.size_t(nSize), C.size_t(nCount), file.cval)
 
 	return data
+}
+
+// Delete a file. This method goes through the VSIFileHandler virtualization and may work on
+// unusual filesystems such as in memory.
+func VSIUnlink(fileName string) error {
+	cFileName := C.CString(fileName)
+	defer C.free(unsafe.Pointer(cFileName))
+	deleted := C.VSIUnlink(cFileName)
+	if deleted != 0 {
+		return fmt.Errorf("Error: VSILFILE '%s' unlink error", fileName)
+	}
+	return nil
+}
+
+// Create a new directory with the indicated mode.
+// The mode is ignored on some platforms.
+// A reasonable default mode value would be 0666.
+// This method goes through the VSIFileHandler virtualization
+// and may work on unusual filesystems such as in memory.
+func VSIMkdir(dir string) error {
+	cDir := C.CString(dir)
+	defer C.free(unsafe.Pointer(cDir))
+	made := C.VSIMkdir(cDir, C.long(uint32(0666)))
+	if int(made) != 0 {
+		return fmt.Errorf("Error: VSILFILE '%s' mkdir error", dir)
+	}
+	return nil
+}
+
+// Create a directory and all its ancestors.
+func VSIMkdirRecursive(dir string) error {
+	cDir := C.CString(dir)
+	defer C.free(unsafe.Pointer(cDir))
+	made := C.VSIMkdirRecursive(cDir, C.long(uint32(0666)))
+	if int(made) != 0 {
+		return fmt.Errorf("Error: VSILFILE '%s' mkdir resursive error", dir)
+	}
+	return nil
+}
+
+// Deletes a directory object from the file system. On some systems the directory must be empty before it can be deleted.
+// This method goes through the VSIFileHandler virtualization and may work on unusual filesystems such as in memory.
+func VSIRmdir(dir string) error {
+	cDir := C.CString(dir)
+	defer C.free(unsafe.Pointer(cDir))
+	deleted := C.VSIRmdir(cDir)
+	if deleted != 0 {
+		return fmt.Errorf("Error: VSILFILE '%s' unlink error", dir)
+	}
+	return nil
+}
+
+// Delete a directory recursively.
+// Deletes a directory object and its content from the file system.
+// Starting with GDAL 3.1, /vsis3/ has an efficient implementation of this function.
+func VSIRmdirRecursive(dir string) error {
+	cDir := C.CString(dir)
+	defer C.free(unsafe.Pointer(cDir))
+	deleted := C.VSIRmdirRecursive(cDir)
+	if deleted != 0 {
+		return fmt.Errorf("Error: VSILFILE '%s' unlink error", dir)
+	}
+	return nil
 }
