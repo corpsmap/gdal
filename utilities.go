@@ -321,3 +321,38 @@ func DEMProcessing(dstDS string, sourceDS Dataset, processing string, colorFileN
 	}
 	return Dataset{ds}, nil
 }
+
+func Polygonize(rasterBand RasterBand, maskBand *RasterBand, outLayer Layer, pixValField int, options []string, progress ProgressFunc, progressArg interface{}) error {
+
+	var papszOptions **C.char
+	if len(options) > 0 {
+		opts := make([]*C.char, len(options)+1)
+		for i, opt := range options {
+			opts[i] = C.CString(opt)
+			defer C.free(unsafe.Pointer(opts[i]))
+		}
+		opts[len(options)] = nil // Null-terminate
+
+		papszOptions = (**C.char)(unsafe.Pointer(&opts[0]))
+	}
+
+	var maskBandVal C.GDALRasterBandH
+	if maskBand != nil {
+		maskBandVal = maskBand.cval
+	} else {
+		maskBandVal = nil
+	}
+
+	if progress == nil {
+		return CPLErr(C.GDALPolygonize(rasterBand.cval, maskBandVal, outLayer.cval, C.int(pixValField), papszOptions, nil, nil)).Err()
+	} else {
+		arg := &goGDALProgressFuncProxyArgs{
+			progress, progressArg,
+		}
+		return CPLErr(C.GDALPolygonize(
+			rasterBand.cval, maskBandVal, outLayer.cval, C.int(pixValField), papszOptions,
+			C.goGDALProgressFuncProxyB(),
+			unsafe.Pointer(arg),
+		)).Err()
+	}
+}
